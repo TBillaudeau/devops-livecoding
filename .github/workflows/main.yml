@@ -1,0 +1,66 @@
+name: CI devops 2023
+
+on:
+  push:
+    branches:
+      - main
+      - test
+  pull_request:
+    branches:
+      - main
+      - test
+
+jobs:
+  # Tests the backend
+  test-backend:
+    runs-on: ubuntu-22.04
+    steps:
+      # Checks out repository
+      - uses: actions/checkout@v4
+
+      # Sets up JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+
+      # Builds and tests with Maven
+      - name: Build and test with Maven        
+        run: mvn -B clean verify sonar:sonar -Dsonar.projectKey=TBillaudeau_devops-livecoding -Dsonar.organization=tbillaudeau -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=${{ secrets.SONAR_TOKEN }}  --file ./simple-api/pom.xml
+
+  # Builds and pushes Docker images
+  build-and-push-docker-image:
+    if: github.ref == 'refs/heads/main'
+    needs: test-backend
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Logs in to DockerHub
+      - name: Login to DockerHub
+        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Builds and pushes the backend Docker image
+      - name: Build and push backend image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./simple-api
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-simple-api:latest
+          push: ${{ github.ref == 'refs/heads/main' }}
+
+      # Builds and pushes the database Docker image
+      - name: Build and push database image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./database
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-database:latest
+          push: ${{ github.ref == 'refs/heads/main' }}
+
+      # Builds and pushes the httpd Docker image
+      - name: Build and push httpd image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./http-server
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tp-devops-httpd:latest
+          push: ${{ github.ref == 'refs/heads/main' }}
